@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OXT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&display=swap">
+<style>
+/* Layout: the viewport is the board, edge to edge. A thin grey band, the colour between the two, carries progress and three quiet controls. One fixed look in either host theme. */
+:root{
+  --black:#0a0a0a;
+  --white:#f6f6f4;
+  --grey:#8d8c88;
+  --ink:#121212;
+  --x:#a3a29e;
+  --seam:rgba(128,128,128,.32);
+  --mono:"Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{
+  margin:0;background:var(--grey);color:var(--ink);font-family:var(--mono);
+  overflow:hidden;overscroll-behavior:none;
+  -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
+#app{position:relative;height:100%;display:flex;flex-direction:column}
+@supports (height:100dvh){#app{height:100dvh}}
+#board{position:relative;flex:1 1 auto;min-height:0;display:grid;background:var(--white)}
+
+.t{
+  appearance:none;-webkit-appearance:none;border:0;border-radius:0;margin:0;padding:0;
+  width:100%;height:100%;min-width:0;min-height:0;position:relative;
+  background:var(--white);box-shadow:inset 0 0 0 .5px var(--seam);
+  transition:background-color .2s ease, box-shadow .7s ease;
+  cursor:pointer;touch-action:manipulation;outline:none;
+}
+.t.b{background:var(--black)}
+.t::after{
+  content:"";position:absolute;inset:32%;background:var(--black);
+  opacity:0;transition:opacity .22s ease;pointer-events:none;
+}
+.t.b::after{background:var(--white)}
+.t::before{
+  content:"";position:absolute;left:50%;top:50%;width:clamp(14px,40%,72px);aspect-ratio:1;
+  transform:translate(-50%,-50%);background:var(--x);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M6 6L94 94M94 6L6 94' fill='none' stroke='%23000' stroke-width='1' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M6 6L94 94M94 6L6 94' fill='none' stroke='%23000' stroke-width='1' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center/contain no-repeat;
+  opacity:0;transition:opacity .22s ease;pointer-events:none;
+}
+.t.ghost::before{opacity:1}
+.t.tap::after{animation:tap .55s ease-out 1}
+.t.pulse::after{animation:pulse 1.5s ease-in-out 3}
+.t:focus-visible{box-shadow:inset 0 0 0 3px var(--grey)}
+#board.seamless .t{box-shadow:inset 0 0 0 0 rgba(128,128,128,0)}
+@keyframes tap{0%{opacity:.5}100%{opacity:0}}
+@keyframes pulse{0%,100%{opacity:0}50%{opacity:.45}}
+
+#bar{
+  flex:0 0 auto;height:44px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding-left:16px;padding-right:16px;background:var(--grey);
+}
+#pips{display:flex;gap:7px;align-items:center}
+.pip{width:9px;height:9px;box-shadow:inset 0 0 0 1px var(--ink)}
+.pip.b{background:var(--black)}
+.pip.w{background:var(--white)}
+.pip.cur{outline:1px solid var(--ink);outline-offset:2px}
+#ctrls{display:flex;gap:2px}
+#ctrls button{
+  appearance:none;-webkit-appearance:none;background:none;border:0;border-radius:0;
+  padding:8px;font:inherit;font-size:11px;font-variation-settings:"wdth" 87.5;letter-spacing:.06em;
+  color:var(--ink);cursor:pointer;
+}
+#ctrls button:disabled{opacity:.35;cursor:default}
+#ctrls button:focus-visible{outline:1px solid var(--ink)}
+#ctrls button.nudge{animation:nudge 1.2s ease-in-out 3}
+@keyframes nudge{50%{background:var(--ink);color:var(--grey)}}
+
+#end{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;
+  padding-left:16px;padding-right:16px;background:var(--black);color:var(--white);
+  opacity:0;transition:opacity 1.2s ease;
+}
+#end.w{background:var(--white);color:var(--black)}
+#end.show{opacity:1}
+#end .mark{
+  font-size:clamp(44px,12vw,120px);font-weight:200;font-variation-settings:"wdth" 112.5;
+  letter-spacing:.32em;margin-right:-.32em;line-height:1;color:inherit;text-decoration:none;
+}
+#end .mark:focus-visible{outline:1px solid currentColor;outline-offset:8px}
+#path{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+#path i{width:14px;height:14px;box-shadow:inset 0 0 0 1px currentColor}
+#path i.b{background:var(--black)}
+#path i.w{background:var(--white)}
+#tally{font-size:11px;letter-spacing:.08em;opacity:.7;font-variation-settings:"wdth" 87.5}
+#again{
+  appearance:none;-webkit-appearance:none;background:none;border:1px solid currentColor;border-radius:0;
+  color:inherit;font:inherit;font-size:11px;letter-spacing:.1em;padding:10px 18px;cursor:pointer;
+}
+#again:focus-visible{outline:1px solid currentColor;outline-offset:3px}
+
+@media (prefers-reduced-motion: reduce){
+  .t{transition:none}
+  .t.tap::after,.t.pulse::after,#ctrls button.nudge{animation:none}
+  #end{transition:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="board" aria-label="Board"></div>
+  <div id="bar">
+    <div id="pips" aria-label="Progress"></div>
+    <div id="ctrls">
+      <button id="undo" type="button" disabled>undo</button>
+      <button id="reset" type="button" disabled>reset</button>
+      <button id="sound" type="button" aria-pressed="true">sound on</button>
+    </div>
+  </div>
+  <div id="end" hidden>
+    <a class="mark" href="./" aria-label="OXT home">OXT</a>
+    <div id="path" aria-label="Your colours, board by board"></div>
+    <div id="tally"></div>
+    <button id="again" type="button">again</button>
+  </div>
+</div>
+
+<script>
+/* Pure puzzle logic: no DOM. Boards are built backward from a solved page, so every board has a way home. */
+(function (g) {
+  const LEVELS = [
+    { dims:[1,3], plain:'self',  sw:[],                                              moves:1, show:true },
+    { dims:[1,3], plain:'cross', sw:[],                                              moves:1, show:true },
+    { dims:[2,3], plain:'cross', sw:[],                                              moves:2, show:true },
+    { dims:[3,3], plain:'cross', sw:[['row']],                                       moves:2, show:true, force:1 },
+    { dims:[4,4], plain:'cross', sw:[['col'],['mirror']],                            moves:3, force:1 },
+    { dims:[5,5], plain:'cross', sw:[['row'],['col'],['x']],                         moves:4, force:2 },
+    { dims:[5,5], plain:'cross', sw:[['row','col'],['col','row']],                   moves:4, force:2 },
+    { dims:[7,7], plain:'cross', sw:[['row','col'],['mirror'],['x'],['col','row']],  moves:5, force:2 }
+  ];
+
+  function shuffle(a){ for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  const uniform = s => s.every(v => v === s[0]);
+
+  // Every shape includes the tile itself, which keeps two-faced tiles reversible.
+  function shape(kind, r, c, R, C){
+    const out = [];
+    const add = (y, x) => { if (y >= 0 && y < R && x >= 0 && x < C) { const k = y * C + x; if (!out.includes(k)) out.push(k); } };
+    add(r, c);
+    if (kind === 'cross') { add(r - 1, c); add(r + 1, c); add(r, c - 1); add(r, c + 1); }
+    else if (kind === 'row') { for (let x = 0; x < C; x++) add(r, x); }
+    else if (kind === 'col') { for (let y = 0; y < R; y++) add(y, c); }
+    else if (kind === 'x') { add(r - 1, c - 1); add(r - 1, c + 1); add(r + 1, c - 1); add(r + 1, c + 1); }
+    else if (kind === 'mirror') { add(R - 1 - r, C - 1 - c); }
+    return out;
+  }
+
+  // faces[k].b fires when tile k is clicked while black; faces[k].w fires while white.
+  function makeFaces(lv, R, C){
+    const N = R * C, faces = [];
+    for (let k = 0; k < N; k++) { const s = shape(lv.plain, Math.floor(k / C), k % C, R, C); faces.push({ b: s, w: s, sw: false }); }
+    const center = (R % 2 && C % 2) ? ((R - 1) / 2) * C + (C - 1) / 2 : -1;
+    const pool = shuffle([...Array(N).keys()].filter(k => k !== center));
+    lv.sw.forEach((spec, n) => {
+      const k = pool[n], r = Math.floor(k / C), c = k % C;
+      faces[k] = { b: shape(spec[0], r, c, R, C), w: shape(spec[1] || spec[0], r, c, R, C), sw: true };
+    });
+    return faces;
+  }
+  const faceFor = (faces, state, k) => state[k] ? faces[k].b : faces[k].w;
+
+  // Walk backward from the solved colour. A tile that is black now was white before its click,
+  // so the backward step applies its white face (and the reverse). The player's route home is
+  // the same tiles in reverse order.
+  function scramble(lv, faces, base){
+    const N = faces.length;
+    const sw = faces.map((f, k) => f.sw ? k : -1).filter(k => k >= 0);
+    const moves = Math.min(lv.moves, N);
+    let last = null;
+    for (let t = 0; t < 300; t++) {
+      const s = new Array(N).fill(base);
+      const picks = shuffle(sw.slice()).slice(0, Math.min(lv.force || 0, sw.length));
+      for (const k of shuffle([...Array(N).keys()])) { if (picks.length >= moves) break; if (!picks.includes(k)) picks.push(k); }
+      const order = shuffle(picks), seq = [];
+      for (const k of order) { const set = s[k] ? faces[k].w : faces[k].b; for (const j of set) s[j] = !s[j]; seq.push({ k, set }); }
+      last = { s, seq, sol: order.slice().reverse() };
+      if (!uniform(s)) return last;
+    }
+    return last;
+  }
+
+  // Solve A x = d over GF(2). Column i of A is the set tile i flips. Returns a click vector or null.
+  function solveGF2(sets, d){
+    const n = d.length, rows = [];
+    for (let j = 0; j < n; j++) rows.push(new Uint8Array(n + 1));
+    for (let i = 0; i < n; i++) for (const j of sets[i]) rows[j][i] = 1;
+    for (let j = 0; j < n; j++) rows[j][n] = d[j] ? 1 : 0;
+    let r = 0; const piv = [];
+    for (let c = 0; c < n && r < n; c++) {
+      let p = -1;
+      for (let k = r; k < n; k++) if (rows[k][c]) { p = k; break; }
+      if (p < 0) continue;
+      [rows[r], rows[p]] = [rows[p], rows[r]];
+      for (let k = 0; k < n; k++) if (k !== r && rows[k][c]) for (let m = c; m <= n; m++) rows[k][m] ^= rows[r][m];
+      piv.push(c); r++;
+    }
+    for (let k = r; k < n; k++) if (rows[k][n]) return null;
+    const x = new Uint8Array(n);
+    for (let k = 0; k < r; k++) x[piv[k]] = rows[k][n];
+    return x;
+  }
+
+  g.TileCore = { LEVELS, shuffle, uniform, shape, makeFaces, faceFor, scramble, solveGF2 };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+
+<script>
+(() => {
+  const T = window.TileCore;
+  const $ = s => document.querySelector(s);
+  const board = $('#board'), pipsEl = $('#pips'), undoB = $('#undo'), resetB = $('#reset'), soundB = $('#sound');
+  const endEl = $('#end'), pathEl = $('#path'), tallyEl = $('#tally'), againB = $('#again');
+  const LEVELS = T.LEVELS;
+  const SCALE = [196.00, 220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33];
+  let reduce = false;
+  try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+  let L = 0, R = 1, C = 3, N = 3, epoch = 0;
+  let faces = [], state = [], initial = [], history = [], results = [], solution = [];
+  let tiles = [], busy = true, twoFaced = false, soundOn = true, ac = null;
+  let idleT = null, holdT = null, hoverT = null, focusT = null, delayT = null;
+  let downK = -1, held = false;
+
+  const rc = k => [Math.floor(k / C), k % C];
+
+  function makeTiles(){
+    board.style.gridTemplateColumns = 'repeat(' + C + ', 1fr)';
+    board.style.gridTemplateRows = 'repeat(' + R + ', 1fr)';
+    board.textContent = '';
+    tiles = [];
+    for (let k = 0; k < N; k++) {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 't' + (state[k] ? ' b' : '');
+      el.dataset.i = String(k);
+      tiles.push(el);
+      board.appendChild(el);
+    }
+    labelAll();
+  }
+  function label(j){ const [r, c] = rc(j); tiles[j].setAttribute('aria-label', 'Row ' + (r + 1) + ', column ' + (c + 1) + ', ' + (state[j] ? 'black' : 'white')); }
+  function labelAll(){ for (let j = 0; j < N; j++) label(j); }
+  function clearDelays(){ tiles.forEach(el => { el.style.transitionDelay = ''; }); }
+  function paint(){
+    clearTimeout(delayT);
+    tiles.forEach((el, j) => { el.style.transitionDelay = ''; el.classList.toggle('b', state[j]); });
+    labelAll();
+  }
+
+  // Flip a set with a ripple that travels outward from the tile that fired it.
+  function apply(set, origin, step){
+    const [r0, c0] = rc(origin);
+    let max = 0;
+    for (const j of set) {
+      state[j] = !state[j];
+      const [r, c] = rc(j);
+      const d = reduce ? 0 : Math.hypot(r - r0, c - c0) * step;
+      if (d > max) max = d;
+      tiles[j].style.transitionDelay = d + 'ms';
+      tiles[j].classList.toggle('b', state[j]);
+      label(j);
+    }
+    clearTimeout(delayT);
+    delayT = setTimeout(clearDelays, max + 320);
+    const o = tiles[origin];
+    o.classList.remove('tap'); void o.offsetWidth; o.classList.add('tap');
+    setTimeout(() => o.classList.remove('tap'), 650);
+    return max;
+  }
+
+  /* Sound: one pentatonic note per click, pitched by how much of the page is white. */
+  function unlock(){
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+    } catch (e) { ac = null; }
+  }
+  function tone(f, dur, gain, when){
+    if (!soundOn || !ac) return;
+    try {
+      const t0 = ac.currentTime + (when || 0);
+      const o = ac.createOscillator(), v = ac.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f, t0);
+      v.gain.setValueAtTime(0.0001, t0);
+      v.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
+      v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(v); v.connect(ac.destination);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    } catch (e) {}
+  }
+  function note(){
+    const white = state.reduce((a, v) => a + (v ? 0 : 1), 0) / N;
+    tone(SCALE[Math.round(white * (SCALE.length - 1))], 0.24, 0.05, 0);
+  }
+  function chord(black){
+    (black ? [98.00, 146.83, 196.00] : [523.25, 659.25, 783.99]).forEach((f, n) => tone(f, 1.4, 0.04, n * 0.09));
+  }
+
+  function ghost(k){ clearGhost(); for (const j of T.faceFor(faces, state, k)) tiles[j].classList.add('ghost'); }
+  function clearGhost(){ tiles.forEach(el => el.classList.remove('ghost')); }
+
+  function ui(){
+    const can = !busy && history.length > 0;
+    undoB.disabled = !can;
+    resetB.disabled = !can;
+    soundB.textContent = soundOn ? 'sound on' : 'sound off';
+    soundB.setAttribute('aria-pressed', String(soundOn));
+  }
+  function pips(){
+    pipsEl.innerHTML = LEVELS.map((_, k) =>
+      '<span class="pip' + (results[k] ? ' ' + results[k] : '') + (k === L ? ' cur' : '') + '"></span>').join('');
+  }
+
+  function press(k){
+    if (busy) return;
+    poke();
+    const set = T.faceFor(faces, state, k);
+    history.push(state.slice());
+    clearGhost();
+    apply(set, k, 30);
+    note();
+    ui();
+    if (T.uniform(state)) solved(state[0]);
+  }
+
+  function solved(black){
+    busy = true; clearTimeout(idleT); ui();
+    results[L] = black ? 'b' : 'w';
+    pips();
+    const ep = epoch;
+    setTimeout(() => { if (ep !== epoch) return; board.classList.add('seamless'); chord(black); }, 380);
+    setTimeout(() => {
+      if (ep !== epoch) return;
+      if (L >= LEVELS.length - 1) finish(black);
+      else { L++; begin(black); }
+    }, 1800);
+  }
+
+  // The solved page cracks into the next grid, then the hidden clicks play out.
+  function begin(base){
+    const ep = ++epoch;
+    busy = true; clearTimeout(idleT); clearTimeout(holdT); clearTimeout(hoverT); downK = -1; held = false;
+    const lv = LEVELS[L];
+    [R, C] = innerWidth >= innerHeight ? [lv.dims[0], lv.dims[1]] : [lv.dims[1], lv.dims[0]];
+    N = R * C;
+    state = new Array(N).fill(base);
+    faces = T.makeFaces(lv, R, C);
+    twoFaced = lv.sw.some(s => s.length > 1);
+    history = [];
+    board.classList.add('seamless');
+    makeTiles();
+    pips(); ui();
+    requestAnimationFrame(() => requestAnimationFrame(() => board.classList.remove('seamless')));
+    setTimeout(() => {
+      if (ep !== epoch) return;
+      const { s, seq, sol } = T.scramble(lv, faces, base);
+      solution = sol;
+      if (lv.show) {
+        seq.forEach((m, n) => setTimeout(() => { if (ep === epoch) { apply(m.set, m.k, 45); note(); } }, 350 + n * 950));
+        setTimeout(() => { if (ep === epoch) ready(s); }, 350 + seq.length * 950 + 250);
+      } else {
+        clearTimeout(delayT);
+        s.forEach((v, j) => {
+          if (v !== state[j]) {
+            state[j] = v;
+            tiles[j].style.transitionDelay = (reduce ? 0 : Math.random() * 700) + 'ms';
+            tiles[j].classList.toggle('b', v);
+          }
+        });
+        delayT = setTimeout(clearDelays, 1000);
+        setTimeout(() => { if (ep === epoch) ready(s); }, 1000);
+      }
+    }, 900);
+  }
+
+  function ready(s){
+    state = s.slice(); initial = s.slice(); history = [];
+    paint(); busy = false; ui(); poke();
+  }
+
+  function finish(black){
+    endEl.classList.toggle('w', !black);
+    pathEl.innerHTML = results.map(r => '<i class="' + r + '"></i>').join('');
+    const nb = results.filter(r => r === 'b').length;
+    tallyEl.textContent = nb + ' black, ' + (results.length - nb) + ' white';
+    endEl.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => endEl.classList.add('show')));
+  }
+
+  /* After thirty idle seconds, pulse one tile that belongs to a route home. */
+  function poke(){ clearTimeout(idleT); idleT = setTimeout(hint, 30000); }
+  function hint(){
+    if (busy) return;
+    let k = -1;
+    if (!twoFaced) {
+      const sets = faces.map(f => f.b);
+      let best = null;
+      for (const target of [true, false]) {
+        const x = T.solveGF2(sets, state.map(v => v !== target));
+        if (!x) continue;
+        const idx = [];
+        x.forEach((v, i) => { if (v) idx.push(i); });
+        if (idx.length && (!best || idx.length < best.length)) best = idx;
+      }
+      if (best) k = best[Math.floor(Math.random() * best.length)];
+    } else if (history.length === 0) {
+      k = solution[0];
+    }
+    if (k >= 0 && tiles[k]) {
+      const el = tiles[k];
+      el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+      setTimeout(() => el.classList.remove('pulse'), 4700);
+    } else if (history.length) {
+      resetB.classList.add('nudge');
+      setTimeout(() => resetB.classList.remove('nudge'), 3800);
+    }
+    poke();
+  }
+
+  /* Input: tap flips. Press and hold, hover, or keyboard focus shows what a tile would flip. */
+  document.addEventListener('pointerdown', unlock, { passive: true });
+  document.addEventListener('keydown', unlock);
+
+  board.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.t');
+    if (!el || busy) return;
+    downK = +el.dataset.i; held = false;
+    clearTimeout(holdT);
+    holdT = setTimeout(() => { if (downK >= 0 && !busy) { held = true; ghost(downK); } }, 420);
+  });
+  board.addEventListener('pointerup', e => {
+    clearTimeout(holdT);
+    if (downK < 0) return;
+    const k = downK; downK = -1;
+    if (held) { held = false; clearGhost(); return; }
+    press(k);
+  });
+  board.addEventListener('pointercancel', () => { clearTimeout(holdT); downK = -1; held = false; clearGhost(); });
+  board.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse') return;
+    const el = e.target.closest('.t');
+    clearTimeout(hoverT); clearGhost();
+    if (!el || busy) return;
+    const k = +el.dataset.i;
+    hoverT = setTimeout(() => { if (!busy && downK < 0) ghost(k); }, 650);
+  });
+  board.addEventListener('pointerleave', () => { clearTimeout(hoverT); clearGhost(); });
+  board.addEventListener('contextmenu', e => e.preventDefault());
+  board.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('.t');
+    if (!el) return;
+    e.preventDefault();
+    press(+el.dataset.i);
+  });
+  board.addEventListener('focusin', e => {
+    const el = e.target.closest('.t');
+    clearTimeout(focusT);
+    let visible = false;
+    try { visible = !!el && el.matches(':focus-visible'); } catch (err) {}
+    if (!visible) return;
+    const k = +el.dataset.i;
+    focusT = setTimeout(() => { if (!busy && document.activeElement === el) ghost(k); }, 650);
+  });
+  board.addEventListener('focusout', () => { clearTimeout(focusT); clearGhost(); });
+
+  undoB.addEventListener('click', () => {
+    if (busy || !history.length) return;
+    state = history.pop(); paint(); ui(); poke();
+  });
+  resetB.addEventListener('click', () => {
+    if (busy || !history.length) return;
+    state = initial.slice(); history = []; paint(); ui(); poke();
+    resetB.classList.remove('nudge');
+  });
+  soundB.addEventListener('click', () => { soundOn = !soundOn; ui(); });
+  againB.addEventListener('click', () => {
+    const last = results[results.length - 1] === 'b';
+    endEl.classList.remove('show');
+    setTimeout(() => { endEl.hidden = true; }, 1200);
+    results = []; L = 0;
+    begin(last);
+  });
+
+  begin(false);
+})();
+</script>
+</body>
+</html>
