@@ -22,6 +22,16 @@
     video {
       object-fit: contain;
     }
+    #secret {
+      position: fixed;
+      z-index: 2;
+      display: block;
+      background: transparent;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M6 6L26 26M26 6L6 26' stroke='%23000' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M6 6L26 26M26 6L6 26' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, crosshair;
+    }
+    #haptic { position: fixed; left: -9999px; top: 0; opacity: 0; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -36,6 +46,8 @@
     <source src="OXT%20Title%20Signature%20BW.webm" type="video/webm" />
   </video>
   <canvas id="stage"></canvas>
+  <a id="secret" href="https://www.ohextee.com/" tabindex="-1" aria-label="ohextee"></a>
+  <label id="haptic" aria-hidden="true"><input type="checkbox" switch tabindex="-1" /></label>
   <script>
     // Every frame, paint the whole screen from the video itself: the edges are
     // filled by stretching the frame's corner pixels, then the frame is drawn on
@@ -74,12 +86,66 @@
         }
       }
 
+      // Hidden link: an invisible square in the empty space up and to the
+      // left of the signature, about 5% of the screen. Its position is worked
+      // out from where the signature lands, so it follows every screen size.
+      var secret = document.getElementById('secret');
+      var SIG = { left: 565, top: 126 }; // signature's top-left in the 1920x1080 frame
+      function placeSecret() {
+        var cw = canvas.clientWidth, ch = canvas.clientHeight;
+        var vw = video.videoWidth || 1920, vh = video.videoHeight || 1080;
+        var scale = cw >= ch ? Math.min(cw / vw, ch / vh) : Math.min(1.85 * cw / vw, ch / vh);
+        var sigLeft = (cw - vw * scale) / 2 + SIG.left * scale;
+        var sigTop = (ch - vh * scale) / 2 + SIG.top * scale;
+        var size = Math.round(Math.sqrt(0.05 * cw * ch));
+        var half = size / 2, pad = 12;
+        var cx = Math.max(sigLeft / 2, half + pad);
+        var cy = Math.max(sigTop / 2, half + pad);
+        // Keep the square clear of the signature itself.
+        cx = Math.min(cx, sigLeft - half - pad);
+        cx = Math.max(cx, half);
+        secret.style.width = secret.style.height = size + 'px';
+        secret.style.left = Math.round(cx - half) + 'px';
+        secret.style.top = Math.round(cy - half) + 'px';
+      }
+
+      // Phones: a short buzz when a finger lands on or slides into the spot.
+      // Android uses the vibration API; iPhone (iOS 18+) gets its haptic tick
+      // from toggling a hidden system switch.
+      var haptic = document.getElementById('haptic');
+      function buzz() {
+        if (navigator.vibrate) { navigator.vibrate(35); }
+        else { try { haptic.click(); } catch (e) {} }
+      }
+      function insideSecret(x, y) {
+        var r = secret.getBoundingClientRect();
+        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      }
+      var fingerInside = false, usedTouch = false;
+      function onTouch(e) {
+        usedTouch = true;
+        var t = e.touches[0];
+        if (!t) return;
+        var inside = insideSecret(t.clientX, t.clientY);
+        if (inside && !fingerInside) buzz();
+        fingerInside = inside;
+      }
+      document.addEventListener('touchstart', onTouch, { passive: true });
+      document.addEventListener('touchmove', onTouch, { passive: true });
+      document.addEventListener('touchend', function () { fingerInside = false; }, { passive: true });
+      secret.addEventListener('click', function (e) {
+        if (!usedTouch) return; // mouse: go straight there
+        e.preventDefault(); // touch: let the buzz land before leaving
+        setTimeout(function () { window.location.href = secret.href; }, 120);
+      });
+
       resize();
-      function refit() { resize(); draw(); }
+      placeSecret();
+      function refit() { resize(); draw(); placeSecret(); }
       window.addEventListener('resize', refit);
       window.addEventListener('orientationchange', refit);
       if (window.visualViewport) window.visualViewport.addEventListener('resize', refit);
-      video.addEventListener('loadeddata', draw);
+      video.addEventListener('loadeddata', function () { draw(); placeSecret(); });
       loop();
     })();
   </script>
