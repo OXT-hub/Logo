@@ -230,7 +230,7 @@ body{
   let L = 0, R = 1, C = 3, N = 3, epoch = 0;
   let faces = [], state = [], initial = [], history = [], results = [], solution = [];
   let tiles = [], busy = true, twoFaced = false, soundOn = true, ac = null;
-  let idleT = null, holdT = null, hoverT = null, focusT = null, delayT = null;
+  let idleT = null, holdT = null, focusT = null, delayT = null;
   let downK = -1, held = false;
 
   const rc = k => [Math.floor(k / C), k % C];
@@ -352,7 +352,7 @@ body{
   // The solved page cracks into the next grid, then the hidden clicks play out.
   function begin(base){
     const ep = ++epoch;
-    busy = true; clearTimeout(idleT); clearTimeout(holdT); clearTimeout(hoverT); downK = -1; held = false;
+    busy = true; clearTimeout(idleT); clearTimeout(holdT); downK = -1; held = false;
     const lv = LEVELS[L];
     [R, C] = innerWidth >= innerHeight ? [lv.dims[0], lv.dims[1]] : [lv.dims[1], lv.dims[0]];
     N = R * C;
@@ -430,7 +430,7 @@ body{
     poke();
   }
 
-  /* Input: tap flips. Press and hold, hover, or keyboard focus shows what a tile would flip. */
+  /* Input: tap or click flips. Press and hold (finger or mouse button), or keyboard focus, shows what a tile would flip. */
   document.addEventListener('pointerdown', unlock, { passive: true });
   document.addEventListener('keydown', unlock);
 
@@ -449,15 +449,7 @@ body{
     press(k);
   });
   board.addEventListener('pointercancel', () => { clearTimeout(holdT); downK = -1; held = false; clearGhost(); });
-  board.addEventListener('pointerover', e => {
-    if (e.pointerType !== 'mouse') return;
-    const el = e.target.closest('.t');
-    clearTimeout(hoverT); clearGhost();
-    if (!el || busy) return;
-    const k = +el.dataset.i;
-    hoverT = setTimeout(() => { if (!busy && downK < 0) ghost(k); }, 650);
-  });
-  board.addEventListener('pointerleave', () => { clearTimeout(hoverT); clearGhost(); });
+  board.addEventListener('pointerleave', () => { clearGhost(); });
   board.addEventListener('contextmenu', e => e.preventDefault());
   board.addEventListener('keydown', e => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
