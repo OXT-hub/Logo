@@ -31,15 +31,6 @@
       outline: none;
       cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M6 6L26 26M26 6L6 26' stroke='%23000' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M6 6L26 26M26 6L6 26' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, crosshair;
     }
-    #door {
-      position: fixed;
-      z-index: 2;
-      display: block;
-      background: transparent;
-      -webkit-tap-highlight-color: transparent;
-      outline: none;
-      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect x='9.5' y='4.5' width='13' height='23' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, pointer;
-    }
     #haptic { position: fixed; left: -9999px; top: 0; opacity: 0; pointer-events: none; }
   </style>
 </head>
@@ -56,7 +47,6 @@
   </video>
   <canvas id="stage"></canvas>
   <a id="secret" href="https://www.ohextee.com/" tabindex="-1" aria-label="ohextee"></a>
-  <a id="door" href="tiles.html" tabindex="-1" aria-label="tiles"></a>
   <label id="haptic" aria-hidden="true"><input type="checkbox" switch tabindex="-1" /></label>
   <script>
     // Every frame, paint the whole screen from the video itself: the edges are
@@ -96,18 +86,25 @@
         }
       }
 
-      // Hidden link: an invisible square in the empty space up and to the
-      // left of the signature, about 5% of the screen. Its position is worked
+      // Hidden link: an invisible X in the empty space up and to the left of
+      // the signature. The X itself covers about 3% of the screen. Its position is worked
       // out from where the signature lands, so it follows every screen size.
       var secret = document.getElementById('secret');
       var SIG = { left: 565, top: 126 }; // signature's top-left in the 1920x1080 frame
+      var ARM = 0.12;  // how far each arm of the X reaches along the box edge (share of box width)
+      var XFILL = 4 * ARM - 4 * ARM * ARM; // share of the box the X covers
+      var X = ARM * 100, L = 50 - X, H = 50 + X, R = 100 - X;
+      var shape = 'polygon(0% ' + X + '%, ' + X + '% 0%, 50% ' + L + '%, ' + R + '% 0%, 100% ' + X + '%, ' +
+        H + '% 50%, 100% ' + R + '%, ' + R + '% 100%, 50% ' + H + '%, ' + X + '% 100%, 0% ' + R + '%, ' + L + '% 50%)';
+      secret.style.clipPath = shape;
+      secret.style.webkitClipPath = shape;
       function placeSecret() {
         var cw = canvas.clientWidth, ch = canvas.clientHeight;
         var vw = video.videoWidth || 1920, vh = video.videoHeight || 1080;
         var scale = cw >= ch ? Math.min(cw / vw, ch / vh) : Math.min(1.85 * cw / vw, ch / vh);
         var sigLeft = (cw - vw * scale) / 2 + SIG.left * scale;
         var sigTop = (ch - vh * scale) / 2 + SIG.top * scale;
-        var size = Math.round(Math.sqrt(0.05 * cw * ch));
+        var size = Math.round(Math.sqrt(0.03 * cw * ch / XFILL));
         var half = size / 2, pad = 12;
         var cx = Math.max(sigLeft / 2, half + pad);
         var cy = Math.max(sigTop / 2, half + pad);
@@ -119,77 +116,45 @@
         secret.style.top = Math.round(cy - half) + 'px';
       }
 
-      // Second hidden link, to the tile game: an invisible upright rectangle
-      // in the black, about 2% of the black area. Like the first, it is placed
-      // from where the signature lands, so it follows every screen size and
-      // never touches the signature.
-      var door = document.getElementById('door');
-      var SIG_END = { right: 1355, bottom: 953 }; // signature's bottom-right in the 1920x1080 frame
-      function placeDoor() {
-        var cw = canvas.clientWidth, ch = canvas.clientHeight;
-        var vw = video.videoWidth || 1920, vh = video.videoHeight || 1080;
-        var scale = cw >= ch ? Math.min(cw / vw, ch / vh) : Math.min(1.85 * cw / vw, ch / vh);
-        var ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
-        var sL = Math.max(0, ox + SIG.left * scale), sT = Math.max(0, oy + SIG.top * scale);
-        var sR = Math.min(cw, ox + SIG_END.right * scale), sB = Math.min(ch, oy + SIG_END.bottom * scale);
-        var black = cw * ch - Math.max(0, sR - sL) * Math.max(0, sB - sT);
-        var w = Math.sqrt(0.02 * black / 1.75), h = w * 1.75, pad = 12;
-        var left = (sR + cw) / 2 - w / 2, top = (sB + ch) / 2 - h / 2;
-        left = Math.min(Math.max(left, pad), cw - w - pad);
-        top = Math.min(Math.max(top, pad), ch - h - pad);
-        if (left < sR + pad && top < sB + pad) {
-          if (ch - sB - pad >= h + pad) top = sB + pad;
-          else left = Math.min(sR + pad, cw - w);
-        }
-        door.style.width = Math.round(w) + 'px';
-        door.style.height = Math.round(h) + 'px';
-        door.style.left = Math.round(left) + 'px';
-        door.style.top = Math.round(top) + 'px';
-      }
-
-      // Phones: a short buzz when a finger lands on or slides into a hidden
-      // link. Android uses the vibration API; iPhone (iOS 18+) gets its haptic
-      // tick from toggling a hidden system switch.
+      // Phones: a short buzz when a finger lands on or slides into the spot.
+      // Android uses the vibration API; iPhone (iOS 18+) gets its haptic tick
+      // from toggling a hidden system switch.
       var haptic = document.getElementById('haptic');
       function buzz() {
         if (navigator.vibrate) { navigator.vibrate(35); }
         else { try { haptic.click(); } catch (e) {} }
       }
-      var spots = [secret, door];
-      var fingerIn = [false, false], usedTouch = false;
-      function inside(el, x, y) {
-        var r = el.getBoundingClientRect();
-        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      function insideSecret(x, y) {
+        var r = secret.getBoundingClientRect();
+        var u = (x - r.left) / r.width, v = (y - r.top) / r.height;
+        if (u < 0 || u > 1 || v < 0 || v > 1) return false;
+        return Math.abs(u - v) <= ARM || Math.abs(u + v - 1) <= ARM;
       }
+      var fingerInside = false, usedTouch = false;
       function onTouch(e) {
         usedTouch = true;
         var t = e.touches[0];
         if (!t) return;
-        spots.forEach(function (el, i) {
-          var hit = inside(el, t.clientX, t.clientY);
-          if (hit && !fingerIn[i]) buzz();
-          fingerIn[i] = hit;
-        });
+        var inside = insideSecret(t.clientX, t.clientY);
+        if (inside && !fingerInside) buzz();
+        fingerInside = inside;
       }
       document.addEventListener('touchstart', onTouch, { passive: true });
       document.addEventListener('touchmove', onTouch, { passive: true });
-      document.addEventListener('touchend', function () { fingerIn = [false, false]; }, { passive: true });
-      spots.forEach(function (el) {
-        el.addEventListener('click', function (e) {
-          if (!usedTouch) return; // mouse: go straight there
-          e.preventDefault(); // touch: let the buzz land before leaving
-          setTimeout(function () { window.location.href = el.href; }, 120);
-        });
+      document.addEventListener('touchend', function () { fingerInside = false; }, { passive: true });
+      secret.addEventListener('click', function (e) {
+        if (!usedTouch) return; // mouse: go straight there
+        e.preventDefault(); // touch: let the buzz land before leaving
+        setTimeout(function () { window.location.href = secret.href; }, 120);
       });
 
       resize();
       placeSecret();
-      placeDoor();
-      function refit() { resize(); draw(); placeSecret(); placeDoor(); }
+      function refit() { resize(); draw(); placeSecret(); }
       window.addEventListener('resize', refit);
       window.addEventListener('orientationchange', refit);
       if (window.visualViewport) window.visualViewport.addEventListener('resize', refit);
-      video.addEventListener('loadeddata', function () { draw(); placeSecret(); placeDoor(); });
+      video.addEventListener('loadeddata', function () { draw(); placeSecret(); });
       loop();
     })();
   </script>
