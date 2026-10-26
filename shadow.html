@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shadow at the Door</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital@0;1&display=swap">
+<style>
+/* Layout: one black field; lines land at chosen points and stay, the voice is the only clock. */
+:root {
+  --ink: #000;
+  --type: #fff;
+  --dim: rgba(255,255,255,.42);
+  --ghost: rgba(255,255,255,.16);
+  --line: rgba(255,255,255,.28);
+  --mono: "Courier Prime", "Courier New", Courier, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--ink);
+  color: var(--type);
+  font-family: var(--mono);
+  overflow: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#stage { position: fixed; inset: 0; background: var(--ink); }
+
+.ln {
+  position: absolute;
+  font-size: clamp(16px, 2.3vw, 30px);
+  line-height: 1.3;
+  max-width: min(84vw, 26ch);
+  white-space: pre-wrap;
+  transition: opacity 2.4s ease, filter 2.4s ease;
+}
+.ln .rest { visibility: hidden; }
+.ln .cur {
+  display: inline-block; width: .6ch; height: 1.05em; margin-bottom: -.18em;
+  background: var(--type); animation: blink 1s steps(1) infinite;
+}
+.ln.done .cur { display: none; }
+.ln.past { opacity: .42; }
+.ln.faded { opacity: .16; }
+.ln.final { opacity: 1; }
+.ln.burn.done { animation: flicker 3.2s infinite; }
+.ln.heart.done { animation: pulse 1.1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes flicker {
+  0%, 100% { opacity: 1; } 8% { opacity: .55; } 10% { opacity: 1; }
+  47% { opacity: .8; } 49% { opacity: .3; } 52% { opacity: 1; }
+}
+@keyframes pulse { 0%, 100% { transform: scale(1); } 14% { transform: scale(1.035); } 28% { transform: scale(1); } 42% { transform: scale(1.02); } }
+
+#gate {
+  position: fixed; inset: 0; display: grid; place-items: center; z-index: 5;
+  background: #fff; transition: opacity 1.4s ease;
+}
+#gate.leaving { opacity: 0; pointer-events: none; }
+#gate button {
+  background: none; border: 0; padding: 0; line-height: 0;
+  pointer-events: none; transition: transform .5s ease;
+}
+#gate button:hover { transform: scale(1.02); }
+#gate button:focus-visible { outline: 1px solid #000; outline-offset: 10px; }
+#gate svg { width: min(44vw, 240px); height: auto; display: block; pointer-events: none; }
+#gate polygon {
+  pointer-events: auto;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M5 7H27L16 26Z' fill='none' stroke='%23000' stroke-width='1.5' stroke-linejoin='miter'/%3E%3C/svg%3E") 16 16, pointer;
+}
+
+#panel {
+  position: fixed; z-index: 4;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px 16px;
+  font-size: 12px; color: var(--dim); opacity: .4; transition: opacity .4s;
+  pointer-events: none;
+}
+#panel > * { pointer-events: auto; }
+#panel:hover, #panel:focus-within { opacity: 1; }
+#panel label { display: flex; align-items: center; gap: 6px; }
+#panel select, #panel input, #panel button {
+  font: inherit; color: var(--type); background: var(--ink);
+  border: 1px solid var(--line); padding: 4px 6px; max-width: 46vw;
+}
+#panel input[type=range] { padding: 0; border: 0; accent-color: #fff; width: 80px; }
+#panel button { cursor: pointer; padding: 4px 12px; }
+#panel button:focus-visible, #panel select:focus-visible { outline: 1px solid var(--type); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ln, .ln.burn.done, .ln.heart.done, .ln .cur { animation: none; transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="stage" aria-live="polite"></div>
+
+<div id="gate">
+  <button id="begin" type="button" aria-label="Begin the poem (sound on)">
+    <svg viewBox="0 0 100 87" fill="#000" aria-hidden="true">
+      <polygon points="0,0 100,0 50,87"/>
+    </svg>
+  </button>
+</div>
+
+<div id="panel">
+  <div hidden><select id="voice"></select><select id="mode"><option value="scatter" selected>scatter</option></select></div>
+  <label for="rate">pace <input id="rate" type="range" min="0.5" max="1.3" step="0.05" value="0.8"></label>
+  <button id="replay" type="button">replay</button>
+</div>
+
+<script>
+const POEM = [
+  "I can’t remember the last time I questioned it",
+  "Why is the sun so dry?",
+  "Why is my cement wet?",
+  "I’m in between, some place",
+  "Burning",
+  "Full of what I can’t name",
+  "My heart my heart my heart",
+  "A creaking floor -",
+  "Something come this way,",
+  "There’s a shadow at the door."
+];
+const PAUSE_AFTER = { 3: 500, 4: 1300, 6: 1600, 7: 900 };
+
+const stage = document.getElementById('stage');
+const voiceSel = document.getElementById('voice');
+const rateIn = document.getElementById('rate');
+const modeSel = document.getElementById('mode');
+const synth = window.speechSynthesis;
+let voices = [];
+let run = 0;
+let placed = [];
+let mode = 'scatter';
+
+/* ---------- voices ---------- */
+const ROBOTIC = [/zarvox/i, /trinoids/i, /ralph/i, /fred/i, /albert/i, /google us english/i, /daniel/i, /david/i, /alex/i];
+function loadVoices() {
+  if (!synth) return;
+  voices = synth.getVoices().filter(v => /^en/i.test(v.lang));
+  if (!voices.length) voices = synth.getVoices();
+  const keep = voiceSel.value;
+  voiceSel.innerHTML = '';
+  voices.forEach((v, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = v.name.replace(/^(Microsoft|Google)\s+/, '').slice(0, 28);
+    voiceSel.appendChild(o);
+  });
+  if (keep && voices[keep]) { voiceSel.value = keep; return; }
+  const shelley = voices.findIndex(v => /shelley/i.test(v.name) && /en[-_]GB/i.test(v.lang));
+  const shelleyAny = voices.findIndex(v => /shelley/i.test(v.name));
+  if (shelley >= 0 || shelleyAny >= 0) { voiceSel.value = shelley >= 0 ? shelley : shelleyAny; return; }
+  for (const re of ROBOTIC) {
+    const i = voices.findIndex(v => re.test(v.name));
+    if (i >= 0) { voiceSel.value = i; return; }
+  }
+}
+if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+else { voiceSel.parentElement.hidden = true; }
+
+/* ---------- placement ---------- */
+function bounds() {
+  const r = stage.getBoundingClientRect();
+  const panelH = document.getElementById('panel').offsetHeight + 24;
+  const m = Math.max(20, r.width * 0.04);
+  return { W: r.width, H: r.height, m, bottom: r.height - panelH };
+}
+function overlap(a, b, pad) {
+  const x = Math.max(0, Math.min(a.x + a.w + pad, b.x + b.w + pad) - Math.max(a.x, b.x));
+  const y = Math.max(0, Math.min(a.y + a.h + pad, b.y + b.h + pad) - Math.max(a.y, b.y));
+  return x * y;
+}
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+function place(i, w, h) {
+  const { W, m, bottom } = bounds();
+  const maxX = Math.max(m, W - w - m), maxY = Math.max(m, bottom - h);
+  const n = POEM.length;
+  let x, y;
+  if (mode === 'descent') {
+    const t = i / (n - 1);
+    y = m + t * (maxY - m);
+    const swing = i % 2 ? 1 : -1;
+    x = m + (0.1 + t * 0.6 + swing * rnd(0.05, 0.18)) * (maxX - m);
+  } else if (mode === 'orbit') {
+    const cx = W / 2, cy = (m + bottom) / 2;
+    const a = -Math.PI / 2 + (i / n) * Math.PI * 2 + rnd(-0.15, 0.15);
+    const k = i === n - 1 ? 0 : rnd(0.72, 0.95);
+    x = cx + Math.cos(a) * (W / 2 - m) * k - w / 2;
+    y = cy + Math.sin(a) * ((bottom - m) / 2) * k - h / 2;
+  } else {
+    let best = null, bestScore = Infinity;
+    for (let t = 0; t < 80; t++) {
+      const c = { x: rnd(m, maxX), y: rnd(m, maxY), w, h };
+      const s = placed.reduce((acc, p) => acc + overlap(c, p, 14), 0);
+      if (s < bestScore) { best = c; bestScore = s; if (s === 0) break; }
+    }
+    x = best.x; y = best.y;
+  }
+  x = clamp(x, m, maxX); y = clamp(y, m, maxY);
+  placed.push({ x, y, w, h });
+  return { x, y };
+}
+
+/* ---------- one line ---------- */
+function speakLine(i, token) {
+  return new Promise(resolve => {
+    const text = POEM[i];
+    const el = document.createElement('div');
+    el.className = 'ln';
+    if (text === 'Burning') el.classList.add('burn');
+    if (/^My heart/.test(text)) el.classList.add('heart');
+    const typed = document.createElement('span');
+    const cur = document.createElement('span'); cur.className = 'cur';
+    const rest = document.createElement('span'); rest.className = 'rest'; rest.textContent = text;
+    el.append(typed, cur, rest);
+    el.style.visibility = 'hidden';
+    stage.appendChild(el);
+    const { x, y } = place(i, el.offsetWidth, el.offsetHeight);
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    el.style.visibility = 'visible';
+
+    const rate = parseFloat(rateIn.value);
+    let shown = 0, target = 0, finished = false;
+    const setShown = k => {
+      shown = Math.min(text.length, k);
+      typed.textContent = text.slice(0, shown);
+      rest.textContent = text.slice(shown);
+    };
+    const msPerChar = 72 / rate;
+    const tick = setInterval(() => {
+      if (token !== run) return clearInterval(tick);
+      target = Math.max(target, shown + 1);
+      setShown(target);
+    }, msPerChar);
+
+    const finish = () => {
+      if (finished) return; finished = true;
+      clearInterval(tick); clearTimeout(safety);
+      if (token !== run) return resolve();
+      setShown(text.length);
+      el.classList.add('done');
+      resolve();
+    };
+    const safety = setTimeout(finish, text.length * msPerChar * 1.9 + 2200);
+
+    if (synth) {
+      const u = new SpeechSynthesisUtterance(text);
+      const v = voices[voiceSel.value]; if (v) u.voice = v;
+      u.rate = rate; u.pitch = 0.55;
+      u.onboundary = e => {
+        if (token !== run) return;
+        const end = e.charIndex + (e.charLength || (text.slice(e.charIndex).split(/\s/)[0].length));
+        if (end > target) { target = end; setShown(target); }
+      };
+      u.onend = finish; u.onerror = finish;
+      synth.speak(u);
+    } else {
+      setTimeout(finish, text.length * msPerChar + 400);
+    }
+  });
+}
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function perform() {
+  const token = ++run;
+  if (synth) synth.cancel();
+  stage.innerHTML = '';
+  placed = [];
+  mode = modeSel.value === 'chance'
+    ? ['scatter', 'descent', 'orbit'][Math.floor(Math.random() * 3)]
+    : modeSel.value;
+  await wait(600);
+  for (let i = 0; i < POEM.length; i++) {
+    if (token !== run) return;
+    stage.querySelectorAll('.ln.done:not(.past)').forEach(n => n.classList.add('past'));
+    await speakLine(i, token);
+    await wait(PAUSE_AFTER[i] || 800);
+  }
+  if (token !== run) return;
+  const all = stage.querySelectorAll('.ln');
+  all.forEach((n, k) => n.classList.add(k === all.length - 1 ? 'final' : 'faded'));
+}
+
+document.getElementById('begin').addEventListener('click', () => {
+  const gate = document.getElementById('gate');
+  gate.classList.add('leaving');
+  setTimeout(() => { gate.hidden = true; }, 1500);
+  perform();
+});
+document.getElementById('replay').addEventListener('click', perform);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && synth) { run++; synth.cancel(); }
+});
+</script>
+</body>
+</html>
